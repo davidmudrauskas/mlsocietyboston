@@ -43,7 +43,7 @@ colnames(statsByHierarchy) <- c("Category hierarchy", "Mean", "Median", "Standar
 statsByHierarchy <- statsByHierarchy[order(statsByHierarchy$`Category hierarchy`),]
 
 # Append to parsed category hierarchy and frequency data
-statsBySubcategory <- cbind(countBySubcategories, statsByHierarchy$Mean, statsByHierarchy$Median, statsByHierarchy$`Standard deviation`)
+statsBySubcategory <- cbind(countBySubcategory, statsByHierarchy$Mean, statsByHierarchy$Median, statsByHierarchy$`Standard deviation`)
 colnames(statsBySubcategory) <- c("Level 1", "Level 2", "Level 3", "Level 4", "Level 5", "Count", "Mean", "Median", "Standard deviation")
 
 write.csv(statsBySubcategory, file = "statsBySubcategory.csv", row.names = FALSE)
