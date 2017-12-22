@@ -1,3 +1,5 @@
+library('plyr')
+
 trainingData <- read.csv("~/Downloads/train.tsv", sep = "\t")
 categoryHierarchies <- as.data.frame(table(trainingData$category_name))
 
@@ -22,4 +24,26 @@ for (hierarchy in categoryHierarchies$Var1) {
   parsedCategoryHierarchies <- rbind.fill(split, parsedCategoryHierarchies)
 }
 
-write.csv(parsedCategoryHierarchies, file = "parsedCategoryHierarchies.csv", row.names = FALSE)
+# One population, items without a category, is skipped in the 'for' loop. Adding back
+parsedCategoryHierarchies <- rbind(c(""),parsedCategoryHierarchies)
+
+# Sort raw summary table and parsed categories to align records
+sortedParsedHierarchies <- parsedCategoryHierarchies[order(parsedCategoryHierarchies$`Level 1`, parsedCategoryHierarchies$`Level 2`, parsedCategoryHierarchies$`Level 3`, parsedCategoryHierarchies$`Level 4`, parsedCategoryHierarchies$`Level 5`),]
+sortedHierarchies <- categoryHierarchies[order(categoryHierarchies$Var1),]
+
+countBySubcategory <- cbind(sortedParsedHierarchies, sortedHierarchies$Freq)
+
+# Get basic summary statistics for each set of categories/subcategories
+statsByHierarchy <- data.frame()
+statsByHierarchy <- aggregate(trainingData$price, list(trainingData$category_name), mean)
+statsByHierarchy$median <- aggregate(trainingData$price, list(trainingData$category_name), median)$x
+statsByHierarchy$standard_deviation <- aggregate(trainingData$price, list(trainingData$category_name), sd)$x
+colnames(statsByHierarchy) <- c("Category hierarchy", "Mean", "Median", "Standard deviation")
+# Make sure to sort so records align
+statsByHierarchy <- statsByHierarchy[order(statsByHierarchy$`Category hierarchy`),]
+
+# Append to parsed category hierarchy and frequency data
+statsBySubcategory <- cbind(countBySubcategories, statsByHierarchy$Mean, statsByHierarchy$Median, statsByHierarchy$`Standard deviation`)
+colnames(statsBySubcategory) <- c("Level 1", "Level 2", "Level 3", "Level 4", "Level 5", "Count", "Mean", "Median", "Standard deviation")
+
+write.csv(statsBySubcategory, file = "statsBySubcategory.csv", row.names = FALSE)
