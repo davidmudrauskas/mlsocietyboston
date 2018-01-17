@@ -109,17 +109,30 @@ plt.ylabel('Number of items')
 plt.xlabel('Item condition number')
 
 
-# In[ ]:
+# In[55]:
 
 # The next goal is to figure out, within each category, and then as a whole, the proportion of the RSE that can be explained the category.
 # Based on intuition from visual inspection, it seems that the second level category plausibly separates items into separate price buckets.
+# Log price stats
+# price_statistics assignment currently leading to error involving trying to concatate floats
+mean_log =  lambda x: np.mean(np.log(x + 1))
+std_log = lambda x: np.std(np.log(x + 1))
+sem_log = lambda x: np.std(np.log(x + 1))/x.count()
+cat_statistics = {'mean' : np.mean, 'mean log': mean_log, 'std log' : std_log, 'sem log' : sem_log}
+price_stats = train_df.price.apply(cat_statistics)
+# Category stats
+category2_price_stats = train_df.groupby('category_twoLevel').price.agg(cat_statistics)
+print(price_stats)
+print(category2_price_stats)
 
 
-# In[15]:
+# In[26]:
+
 
 #train_df.category_twoLevel.cat.categories.values
 # This needs to be changed to log price
 result = sm.ols(formula = 'price ~ category_twoLevel', data = train_df).fit()
+result.summary()
 
 
 # In[ ]:
