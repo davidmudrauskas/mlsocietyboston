@@ -1,0 +1,138 @@
+---
+title: "Kaggle - Zillow Home Prices EDA"
+author: "Lilian Cheung"
+date: "March 18, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(RCurl)
+library(data.table)
+library(caret)
+library(plotly)
+```
+
+
+```{r read in datasets}
+runthis <- FALSE
+
+if(runthis==TRUE) {
+path_properties_2016 <- "C:/Lilian/Documents/Technical Training/R Projects/Kaggle/Zillow Home Prices/properties_2016/properties_2016.csv"
+
+path_properties_2017 <- "C:/Lilian/Documents/Technical Training/R Projects/Kaggle/Zillow Home Prices/properties_2017/properties_2017.csv"
+
+path_train_2016 <- "C:/Lilian/Documents/Technical Training/R Projects/Kaggle/Zillow Home Prices/train_2016_v2/train_2016_v2.csv"
+
+path_train_2017 <- "C:/Lilian/Documents/Technical Training/R Projects/Kaggle/Zillow Home Prices/train_2017/train_2017.csv"
+
+## Training Data - 2016 (properties and logerrors of sales)
+  properties_2016 <- fread( file=path_properties_2016, header=TRUE )
+  train_2016 <- fread(file=path_train_2016, header=TRUE)
+
+## Training Data - 2017 (properties and logerrors of sales)
+  properties_2017 <- fread( file=path_properties_2017, header=TRUE )
+  train_2017 <- fread(file=path_train_2017, header=TRUE)
+}
+
+```
+
+
+```{r Create Training Dataset by merging properties and logerrors of sales}
+runthis <- FALSE
+
+if (runthis==TRUE){
+# Merge training data from 2016
+  training_2016 <- merge( properties_2016, train_2016, by="parcelid" )
+
+# Merge training data from 2017
+  training_2017 <- merge( properties_2017, train_2017, by="parcelid")
+  
+# Combine 2016 and 2017 data into a dataframe
+  training_all <- rbind(training_2016, training_2017)
+
+# Save locally
+  save_path <- "C:/Lilian/Documents/Technical Training/R Projects/Kaggle/Zillow Home Prices/training_all.csv"
+  write.csv( training_all, file=save_path, row.names=FALSE)
+}
+```
+
+
+```{r}
+# Read in dataset
+  training_all_path <- "C:/Lilian/Documents/Technical Training/R Projects/Kaggle/Zillow Home Prices/training_all.csv"
+  training_all <- read.csv( file=training_all_path, header=TRUE)
+
+## Sample some percent of dataset for EDA
+  set.seed(123)
+  percent <- 0.10
+  training_sample <- sample_n( training_all, percent*nrow(training_all), replace=FALSE )
+  
+  ## remaining data 
+  # remaining_data <- dplyr::filter( training_all, !parcelid %in% training_sample[["parcelid"]] )
+
+## Save locally
+  save_path <- "C:/Lilian/Documents/Technical Training/R Projects/Kaggle/Zillow Home Prices/training_sample.csv"
+  write.csv( training_sample, file=save_path, row.names=FALSE)
+```
+
+
+```{r}
+## Read in training sample
+  read_path <- "C:/Lilian/Documents/Technical Training/R Projects/Kaggle/Zillow Home Prices/training_sample.csv"
+  training_sample <- read.csv( file=read_path, header=TRUE)
+  training_sample <- mutate(training_sample, transactiondate = as.Date(transactiondate))
+```
+
+
+```{r}
+## Explore transaction counts in sample
+
+# Number of transactions per day
+counts_transactions <- count( training_sample, transactiondate )
+
+n_transactions_plot <- ggplot( counts_transactions, aes(x = transactiondate, y = n) ) +
+                        geom_line( color = "skyblue" ) + 
+                        xlab("Transaction Date") + 
+                        ylab("Number of Transactions") + 
+                        ggtitle("Number of Transactions Per Day")
+
+print( n_transactions_plot )
+ 
+```
+
+
+
+
+```{r}
+## Explore logerror, the response variable
+
+logerror_histogram <- ggplot( training_sample, aes(x = logerror) ) +
+                      geom_histogram( bins = 20)
+
+print(logerror_histogram)
+
+```
+
+
+```{r}
+## Correlations between features (features are time invariant) | PCA between features
+
+
+
+```
+
+
+```{r}
+## Correlations between high logerrors and features
+
+```
+
+
+```{r}
+## Cross correlations between average logerror and transaction counts
+
+
+
+
+```
