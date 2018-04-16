@@ -12,6 +12,10 @@ library(data.table)
 library(caret)
 library(corrplot)
 library(xts)
+library(xgboost)
+library(pls)
+library(Matrix)
+library(vcd)
 ```
 
 
@@ -115,7 +119,10 @@ counts_transactions_month <- dt_training_sample[ , .N, by = .(year(transactionda
   transactions_month <- counts_transactions_month[["N"]]
   transactions_month <- ts( counts_transactions_month[["N"]], frequency = 12, start = 2016)
   
-  plot(as.xts(transactions_month), major.format = "%Y-%m", title="Number of Transactions per Month")
+  print( plot(as.xts(transactions_month), major.format = "%Y-%m", title="Number of Transactions per Month") )
+  
+  par(mar=c(5.1,4.1,4.1,2.1))
+  acf(counts_transactions$n, lag.max = 30)
 
 
 ```
@@ -134,11 +141,34 @@ counts_transactions_month <- dt_training_sample[ , .N, by = .(year(transactionda
         "regionidneighborhood", "storytypeid", "typeconstructiontypeid",
         "assessmentyear", "taxdelinquencyyear")
   training_sample[ to_factor ] <- lapply( training_sample[to_factor], factor)  
-
+  
+  
+## Examine the percentage of missing values per variable
+  
+  # Define a function for finding the percentage of missing values in a column
+      pct_missing_in_column <- function( column ){
+        
+        total_obs <- length( column )
+        pct_missing <- sum( is.na(column)==TRUE )/total_obs
+        
+        pct_missing
+        
+      }
+      
+      pct_missing <- map_dbl( training_sample, pct_missing_in_column )
+    
+    # Which variables are missing under 75% of data?
+      missing_ok_vars <- pct_missing[ pct_missing <= 0.75 ]
+    
+    # Keep only the variables missing less than 75% of data
+      training_sample <- training_sample[ names(missing_ok_vars) ]
+  
+      
 ## Examine continuous variables
   num_columns <- sapply(training_sample, is.numeric)
   cts_training_sample <- training_sample[ num_columns ]
   
+      
   # Correlogram
   cor_matrix <- cor( cts_training_sample, use='pairwise.complete.obs' )
   corrplot(cor_matrix, type='lower')
@@ -175,10 +205,11 @@ counts_transactions_month <- dt_training_sample[ , .N, by = .(year(transactionda
 
 ```
 
+
 ```{r}
 ## Correlations between high logerrors and continuous features
 
-## Arbitrarily define a high logerror as one that meets or exceeds 0.2
+## Arbitrarily define a high logerror as one that meets or exceeds 0.25
   high_logerror_sample <- dplyr::filter( training_sample, abs(logerror) >= 0.25 )
 
 ## Correlations between continuous variables in the high logerror sample
@@ -186,27 +217,110 @@ counts_transactions_month <- dt_training_sample[ , .N, by = .(year(transactionda
   cts_high_logerror_sample <- high_logerror_sample[ num_columns ]
   
   # Correlogram
-  cor_matrix <- cor( cts_high_logerror_sample, use='pairwise.complete.obs' )
-  corrplot(cor_matrix, type='lower')
+    cor_matrix <- cor( cts_high_logerror_sample, use='pairwise.complete.obs' )
+    corrplot(cor_matrix, type='lower')
+
+## log(errors) = log(Z) - log(salesprice) 
+# Take the exponent --> errors = Z/salesprice
+  errors_sample <- mutate( training_sample, error = exp(logerror ))
   
-## A closer look at columns of interest -- turns out most of these are missing, so this is not particularly helpful
-  cols_of_interest <- c( "poolsizesum", "yardbuildingsqft17", "finishedsquarefeet13", "finishedsquarefeet6", "logerror")
-  cor_matrix <- cor( cts_high_logerror_sample[, cols_of_interest], use='pairwise.complete.obs')
-  corrplot(cor_matrix, type='lower')
-  # poolsizesum: total square footage of all pools on property 
-  # yardbuildingsqft17: Patio in yard
-  # finishedsquarefeet13: Perimeter living area
-  # finishedsquarefeet6: Base unfinished and finished area
+  # Properties where Zillow overestimated the salesprice ( error > 1 ) or underestimated the salesprice ( error < 1 )
+    errors_overestimated <- dplyr::filter( errors_sample, error > 1 )
+    errors_underestimated <- dplyr::filter( errors_sample, error < 1 ) 
+    
+  # Look at continuous variables only
+    num_columns <- sapply( errors_sample, is.numeric )
+
+    cts_errors_overestimated <- errors_overestimated[ num_columns ]
+    cts_errors_underestimated <- errors_underestimated[ num_columns ]
   
-  ## These variables are mostly missing, so are not very helpful - e.g.
-  # table( is.na(cts_high_logerror_sample$poolsizesum) )
+  
+  # Correlograms
+    cor_matrix <- cor( cts_errors_overestimated, use = 'pairwise.complete.obs' )
+    corrplot( cor_matrix, type = 'lower' )
+    
+    cor_matrix <- cor( cts_errors_underestimated, use = 'pairwise.complete.obs' )
+    corrplot( cor_matrix, type = 'lower' )
+    
+```
+
+A preliminary look at Pearson's correlations between continuous variables does not show any strong relationships between continuous variables and logerrors, even when the dataset is subsetted by overestimated/underestimated logerrors.
+
+
+```{r, warnings = FALSE}
+### Principal Components Analysis - A Brief Look
+## https://www.r-bloggers.com/principal-component-analysis-in-r/
+## https://www.r-bloggers.com/computing-and-visualizing-pca-in-r/
+## http://www.milanor.net/blog/performing-principal-components-regression-pcr-in-r/
+## https://www.kaggle.com/taurothebull/xgboost-pca/code
+training_sample_pca <- log( cts_training_sample + 0.0001 )
+
+pca <- prcomp( ~bathroomcnt +  bedroomcnt +  calculatedbathnbr +  calculatedfinishedsquarefeet +  finishedsquarefeet12 +  fullbathcnt +  garagecarcnt +  garagetotalsqft + lotsizesquarefeet +  roomcnt + yearbuilt +  structuretaxvaluedollarcnt +  taxvaluedollarcnt +  landtaxvaluedollarcnt +  taxamount , data = training_sample_pca, center = TRUE, scale. = TRUE, na.action = na.omit )
+
+print( pca ) 
+
+plot( pca, type = "l" )
+
+summary( pca )
+
+pcr_mod <- pcr( logerror ~ bathroomcnt +  bedroomcnt +  calculatedbathnbr +  calculatedfinishedsquarefeet +  finishedsquarefeet12 +  fullbathcnt +  garagecarcnt +  garagetotalsqft + lotsizesquarefeet +  roomcnt + yearbuilt +  structuretaxvaluedollarcnt +  taxvaluedollarcnt +  landtaxvaluedollarcnt +  taxamount, data = cts_training_sample, scale = TRUE )
+
+summary(pcr_mod)
+
+validationplot( pcr_mod )
+predplot( pcr_mod )
+
+pcr_pred <- predict( pcr_mod, training_all, ncomp = 3 )
 ```
 
 
 
 
 ```{r}
-## ANOVA matrix?
+
+## Looking at the categorical (factor) variables
+# Reference: http://www.cookbook-r.com/Manipulating_data/Converting_between_data_frames_and_contingency_tables/
+
+
+## Filter out factor variables from the full training dataset
+  factor_vars <- sapply( training_sample, is.factor )
+  factor_training_sample <- training_sample[ factor_vars ]
+  factor_training_sample <- cbind( factor_training_sample, training_sample$logerror )
+  names(factor_training_sample)[ncol(factor_training_sample)] <- "logerror"
+
+## Examine the percentage of values missing in each factor variable
+pct_missing_factor <- map_dbl( factor_training_sample, pct_missing_in_column )
+
+## Filter out variables missing too many values 
+  missing_ok_factors <- pct_missing_factor[ pct_missing_factor <= 0.75 ]
+  factor_training_sample <- factor_training_sample[ names(missing_ok_factors) ]
+
+## Drop some factors
+  drops <- c( "parcelid", "rawcensustractandblock", "censustractandblock" )
+  factor_training_sample <- factor_training_sample[ !names(factor_training_sample) %in% drops ]
+  
+## Is logerror at all related to these categorical variables?
+mod <- lm( logerror ~ airconditioningtypeid  + buildingqualitytypeid + propertycountylandusecode  +  propertylandusetypeid + assessmentyear , data = factor_training_sample   )
+
+summary( mod )
 
 ```
+
+```{r}
+# http://xgboost.readthedocs.io/en/latest/R-package/xgboostPresentation.html
+# https://www.kaggle.com/zoldin/exploratory-analysis-amd-xgboost
+# https://www.kaggle.com/jmbull/boost-starter-0-0648x-lb/code
+# https://machinelearningmastery.com/data-preparation-gradient-boosting-xgboost-python/
+
+
+```
+
+
+
+
+
+
+
+
+
 
